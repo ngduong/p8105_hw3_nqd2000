@@ -1,0 +1,15 @@
+---
+title: "P8105_HW3_nqd2000"
+author: "Ngoc Duong"
+date: "10/10/2019"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(tidyverse)
+library(viridis)
+
+
+```
