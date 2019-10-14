@@ -128,4 +128,143 @@ instacart %>%
 
 From the table, we can see that coffee ice cream was usually ordered at, on average, 2-3pm on weekdays and 12-2pm on weekends, whereas the average hour (of day) for ordering Pink Lady Apples was more around noon and consistent. Since 2-3pm might be the time most people feel tired from working, they might have the tendency to treat themselves (with caffeinated products) and thus coffee ice cream. 
 
+## Problem 2
+```{r load brfss2010 data}
+#get brfss_2010 dataset
+data("brfss_smart2010")
+
+#some data cleaning
+brfss_df <- brfss_smart2010 %>% 
+            janitor::clean_names() %>%      #clean names
+  rename(                                   #simplify names 
+    state = locationabbr,              
+    county = locationdesc) %>% 
+  separate(                                 #separate county into actual county name and state name abbreviation
+    county, 
+    into = c("state_abb", "county"), 
+    sep = " - ") %>% 
+  select(-state_abb) %>%                    #get rid of state name abbreviations
+  mutate(                                   #change data type of some variables
+    state = factor(state),                  #make state, county, topic, and response as factor variables
+    county = factor(county),
+    topic = factor(str_to_lower(topic)),    #recode values to lower cases while making factor
+    response = factor(str_to_lower(response))) %>% 
+  filter(                                   #filter out to focus on only "overall health" topic
+    topic == "overall health",
+    response %in% c("poor", "fair", "good", "very good", "excellent")) %>% #
+  mutate(                                   #order values from "poor" to "excellent"
+    response = factor(
+                  response, 
+                  ordered = TRUE, 
+                  levels = c("poor", 
+                             "fair", 
+                             "good", 
+                             "very good", 
+                             "excellent")))
+```
+
+```{r}                
+#find location number observed in 2002 and 2010
+#in 2002
+brfss_df %>%
+  filter(year == 2002) %>%                      #filter only year 2002
+  select(year, state, county) %>%               #select variables of interest
+  group_by(year, state) %>%                     #group by year, state so each combination is treated as a consistent chunk
+  distinct(county) %>%                          #get rid of duplicate counties in each state
+  mutate(obs_locations = n()) %>%               #create obs_locations as number of counties (locations) within each state
+  filter(obs_locations > 6) %>%                 #filter number of counties >6
+  distinct(year, state, obs_locations) %>%      #get rid of duplicates for final list
+  pivot_wider(                                  #make reader-friendly wide-form dataframe
+    names_from = state,
+    values_from = obs_locations) %>% 
+  knitr::kable()                                #make table 
+
+#in 2010
+brfss_df %>%
+  filter(year == 2010) %>%                      #filter only year 2002
+  select(year, state, county) %>%               #select variables of interest
+  group_by(year, state) %>%                     #group by year, state
+  distinct(county) %>%                          #collapse duplicate counties in each state
+  mutate(
+    obs_locations = n()) %>%                    #create obs_locations as number of counties (locations) within each state
+  filter(
+    obs_locations > 6) %>%                      #filter number of counties >6
+  distinct(year, state, obs_locations) %>%      #get rid of duplicates for final list
+  pivot_wider(                                  #make reader-friendly wide-form dataframe
+    names_from = state,
+    values_from = obs_locations) %>% 
+  knitr::kable()                                #make table 
+```
+
+From the tables above, we could see in 2002, states that were observed at 7 or more locations were CT, FL, MA, NJ, NC, and PA; in 2010, states that were observed at 7 or more locations were CA, CO, FL, MD, MA, NE, NJ, NY, NC, OH, PA, SC, TX, and WA.
+
+CT fell out of the list of states with 7 or more observation locations, while FL AND NJ increased their number of locations dramatically (7 to 41, and 8 to 19, respectively). MA and NC had less dramatic increases in the number of observation locations, and PA decreased from 10 locations to 7. Bigger states seem to have more observation locations (CA with 12, TX with 16, and WA with 10), although MD also have relatively more obversation locations than average (12).
+
+```{r}
+#dataset with excellent responses, with year, state, and a variable that averages the data_value across locations within a state. 
+
+excellent_response_df <- brfss_df %>%
+  filter(
+    response == "excellent") %>%                 #filter out only "excellent" responses
+  select(year, state, data_value) %>%            #select variables of interest
+  group_by(year, state) %>%                      #group/organize to compute measurements about state
+  summarize(                                     #compute average data_value across locations within state
+    mean_value = mean(data_value, na.rm = TRUE))
+```
+
+```{r}
+#“spaghetti” plot of this average value within each state across years 
+excellent_response_df %>% 
+ ggplot(                                         #start plot
+  aes(x = year,                                  #specify values that go to each axis and line color (by state)
+      y = mean_value,  
+      colour = state)) +
+  geom_line() +                                  #specify using line for spaghetti plot
+  viridis::scale_color_viridis(                  #use viridis color palette
+    begin = 0, 
+    discrete = TRUE) +
+  labs(                                          #add titles
+    title = "Distribution of average excellent responses (in percentage)",
+    subtitle = "for every state from 2002 to 2010",
+    x = "Year",
+    y = "Excellent responses (%)") +
+  theme(legend.position = "right",               #format legend and title
+        legend.title = 
+          element_blank(),
+        plot.title = 
+          element_text(hjust = 0.5, size=12, face='bold'),
+        plot.subtitle = 
+          element_text(hjust = 0.5)
+        )
+```
+
+From the graph, we can see that the state represented by yellow-hued line was behind the curve in terms of proportion of responses that are excellent, specifically West Virginia. Some states that are represented by the purple-hued lines seem to be ahead of the curve, including CO, CT, and DC.
+
+```{r}
+#make two-panel graph for distribution inside 
+brfss_df %>%
+  filter(year %in% c("2006", "2010"),            #get only year 2006 and 2010 and NY state
+         state == "NY") %>% 
+  ggplot(aes(                                    #specify values that go to each axis and line color (by county)
+    x = response, 
+    y = data_value, 
+    fill = county)) +
+  geom_bar(                                      #specify graph type -- using barplot 
+    stat = "identity", 
+    position=position_dodge()) +                 #specify unstacked bars
+  labs(                                          #add title
+    title = "Distribution of mean overall health survey responses in NY in 2006 and 2010",
+    x = "Average overall health survey responses", 
+    y= "",
+    caption = "Data from BRFSS") +
+  theme(legend.position = "bottom",              #format legend 
+        legend.title = element_blank(),
+        plot.title = element_text(hjust = 0.5, size=12, face='bold')) +
+  viridis::scale_fill_viridis(                   #use viridis color palette
+       begin = 0,
+       discrete = TRUE) + 
+  facet_grid(year ~ .)                           #create two panels split by year
+```
+
+The plots show that there were high frequency of "Good", "Very good", and "Excellent" responses in 2006 and 2010, with a little more responses falling into the former two categories. No dramatic change was observed comparing 2006 to 2010, although there were the new locations in 2010 (Bronx, Erie, and Kings). 
 
